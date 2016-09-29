@@ -66,3 +66,8 @@ UithoflijnSimulation/obj/Debug/UithoflijnSimulation.csproj.FileListAbsolute.txt
 Network Trash Folder
 Temporary Items
 .apdisk
+*.cache
+*.pdb
+*.exe
+UithoflijnSimulation/obj/Debug/*
+*.suo
