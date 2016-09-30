@@ -9,6 +9,7 @@ namespace UithoflijnSimulation
     class Tram
     {
         public int id, passengers, prevTram;
+        public int tPR, tCS;
 
         public Tram(int ID)
         {

@@ -30,6 +30,8 @@ namespace UithoflijnSimulation
         public Tram[] trams;
         public Queue<Tram> storage;
         public SortedList<int, Event> events;
+        public List<int> schedulePR, scheduleCS;
+        public int pointerPR, pointerCS;
 
         // performance measurement
         public int nrDelays, totalWaitingTime, totalPassengers;
@@ -40,7 +42,7 @@ namespace UithoflijnSimulation
             time = 0;
             previousTime = 0;
             this.buildTrack();
-            this.buildVehicles((int)Math.Ceiling((double)n / 3 * 2));
+            this.buildVehicles((int)Math.Ceiling((double)n / 60 * (2 * (q + r))));
             events = new SortedList<int, Event>();
 
             // initialize definitions
@@ -51,6 +53,8 @@ namespace UithoflijnSimulation
             totalWaitingTime = 0;
             totalPassengers = 0;
 
+            // create schedules for both endstations
+            this.createSchedules(n);
             // schedule first departure at 06:00 from P+R
             events.Add(0, new Event(0, 0, 0, EventType.DepartureEnd));
         }
@@ -96,38 +100,38 @@ namespace UithoflijnSimulation
             {
                 // if so: add tram to queue of the station
                 track[now.station].queue.Add(now.tram);
+                return;
             }
-            else
+            
+            // mark station as occupied
+            track[now.station].current = now.tram;
+
+            // calculate the ammount of passengers unloading and loading
+            int Pout = 0;
+            trams[now.tram].passengers -= Pout;
+
+            int loadLimitTime = (int)Math.Ceiling(12.5 + 0.22 * Pout);
+            int Pin = 0;
+            trams[now.tram].passengers += Pin;
+
+            // check if number of passengers doesn't exceeds the trams limit
+            if (trams[now.tram].passengers > 2 * wagonSize)
             {
-                // mark station as occupied
-                track[now.station].current = now.tram;
-
-                // calculate the ammount of passengers unloading and loading
-                int Pout = 0;
-                trams[now.tram].passengers -= Pout;
-
-                int loadLimitTime = (int)Math.Ceiling(12.5 + 0.22 * Pout);
-                int Pin = 0;
-                trams[now.tram].passengers += Pin;
-
-                // check if number of passengers doesn't exceeds the trams limit
-                if (trams[now.tram].passengers > 2 * wagonSize)
-                {
-                    track[now.station].passengers = trams[now.tram].passengers - 2 * wagonSize;
-                    trams[now.tram].passengers = 2 * wagonSize;
-                    Pin -= track[now.station].passengers;
-                }
-
-                // calculate dwell time on the station
-                int dwellTime = (int)Math.Ceiling(12.5 + 0.22 * Pin + 0.13 * Pout);
-                if (track[now.station].lastDeparture - time + dwellTime < 40)
-                    dwellTime = 40;
-
-                // TODO: add passenger waiting time to performance measurement
-
-                // schedule departure
-                events.Add(time + dwellTime, new Event(time + dwellTime, now.tram, now.station, EventType.Departure));
+                track[now.station].passengers = trams[now.tram].passengers - 2 * wagonSize;
+                trams[now.tram].passengers = 2 * wagonSize;
+                Pin -= track[now.station].passengers;
             }
+
+            // calculate dwell time on the station
+            int dwellTime = (int)Math.Ceiling(12.5 + 0.22 * Pin + 0.13 * Pout);
+            if (track[now.station].lastDeparture - time + dwellTime < 40)
+                dwellTime = 40;
+
+            // TODO: add passenger waiting time to performance measurement
+            totalPassengers += Pin;
+
+            // schedule departure
+            events.Add(time + dwellTime, new Event(time + dwellTime, now.tram, now.station, EventType.Departure));
         }
         private void handleDeparture(Event now)
         {
@@ -160,11 +164,75 @@ namespace UithoflijnSimulation
         }
         private void handleArrivalEnd(Event now)
         {
-                            // check if station is empty, else put in query
-                            // schedule departureEnd
+            // check if station is empty and if tram hasn't overtaken the previous tram
+            if ((track[now.station].current != -1 && track[now.station].current2 != -1) || track[now.station].lastTram != trams[now.tram].prevTram)
+            {
+                // if so: add tram to queue of the station
+                track[now.station].queue.Add(now.tram);
+                return;
+            }
+            
+            // mark station as occupied
+            if (track[now.station].current == -1)
+                track[now.station].current = now.tram;
+            else if (track[now.station].current2 == -1)
+                track[now.station].current2 = now.tram;
+
+            // all passengers leave the tram at the endstation
+            trams[now.tram].passengers = 0;
+
+            int Pin = 0;
+            trams[now.tram].passengers += Pin;
+
+            // check if number of passengers doesn't exceed the trams limit
+            if (trams[now.tram].passengers > 2 * wagonSize)
+            {
+                trams[now.tram].passengers -= (track[now.station].passengers = trams[now.tram].passengers - 2 * wagonSize);
+                Pin -= track[now.station].passengers;
+            }
+
+            // calculate dwell time on the endstation
+            int turnAroundTime = r * 60; // turn around time in seconds
+
+            // TODO: add passenger waiting time to performance measurement
+            totalPassengers += Pin;
+
+            int departTime;
+            // check if tram 
+            /*
+            if (time + turnAroundTime > track[now.station].nextScheduledDep)
+            {
+                departTime = time + turnAroundTime;
+                if (departTime >= track[now.station].nextScheduledDep + 60)
+                    nrDelays++;
+            }
+            else
+            {
+                departTime = track[now.station].nextScheduledDep;
+            }
+
+            // schedule departure
+            events.Add(departTime, new Event(departTime, now.tram, now.station, EventType.DepartureEnd));
+            
+            // schedule next departure
+            if(time < this.toSeconds(07,00) || time >= this.toSeconds(19,00))
+                track[now.station].nextScheduledDep += 15 * 60; // 4 per hour in morning and evening
+            else
+                track[now.station].nextScheduledDep += t;   // every t minutes otherwise
+                */
         }
         private void handleDepartureEnd(Event now)
         {
+            if (track[now.station].lastDeparture > time - 40)
+            {
+                events.Add(track[now.station].lastDeparture + 40, new Event(track[now.station].lastDeparture + 40, now.tram, now.station, EventType.DepartureEnd));
+                return;
+            }
+            track[now.station].lastDeparture = time;
+            track[now.station].lastTram = now.tram;
+            track[now.station].current = -1;
+            
+
             if (time > this.toSeconds(21, 30) && now.station == 0)
             {
                 
@@ -220,6 +288,32 @@ namespace UithoflijnSimulation
                 storage.Enqueue(trams[i]);
             }
 
+        }
+
+        private void createSchedules(int n)
+        {
+            schedulePR = new List<int>();
+            scheduleCS = new List<int>();
+
+            pointerPR = 0;
+            pointerCS = 0;
+
+            int i;
+            for(i = 0; i < this.toSeconds(07,00); i += 15*60)
+            {
+                schedulePR.Add(i);
+                scheduleCS.Add(i + 60 * (q + r));
+            }
+            for (; i < this.toSeconds(19, 00); i += t)
+            {
+                schedulePR.Add(i);
+                scheduleCS.Add(i + 60 * (q + r));
+            }
+            for (; i <= this.toSeconds(21,30); i += 15*60)
+            {
+                schedulePR.Add(i);
+                scheduleCS.Add(i + 60 * (q + r));
+            }
         }
 
         /*private int nextAvailableTram(int stationID, int tramID)

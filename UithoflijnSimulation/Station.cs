@@ -17,7 +17,7 @@ namespace UithoflijnSimulation
         public Boolean toStation;
 
         // endstation variable
-        public int current2, nextScheduledDep;
+        public int current2;
 
         public Station() { }
         public Station(int ID, String Name)
@@ -28,7 +28,6 @@ namespace UithoflijnSimulation
             queue = new List<int>();
             current = -1;
             current2 = -1;
-            nextScheduledDep = 0;
             passengers = 0;
         }
         public Station(int ID, String Name, Boolean ToStation)
